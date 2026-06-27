@@ -396,6 +396,13 @@ de modo que o conflito --- e portanto o número de soluções de compromisso ---
 pequeno. Esse comportamento é coerente com o artigo, cujos principais resultados
 também são comparações \emph{agregadas} de energia e desperdício. A Figura~\ref{fig:mo} (parte inferior) torna isso explícito: a curva \emph{melhor conhecida} mostra que o trade-off existe, porém é raso. As metaheurísticas, com orçamento de $\approx$1000 avaliações, convergem para o joelho de menor energia; o NSGA-II encosta na fronteira, enquanto o VMPACS --- por minimizar servidores sem refinar tanto o balanceamento --- fica um pouco acima dela, o que aponta um \emph{refinamento por busca local (versão memética)} como melhoria direta.
 
+\paragraph{Por que a fronteira não é uma curva suave?} Porque a energia vale exatamente $f_1=\text{const}+P^{idle}\cdot k$, com $k$ inteiro igual ao número de servidores: ela só assume valores \emph{discretos}, de $162$\,W em $162$\,W. A fronteira é, portanto, um conjunto de \emph{pontos} (um por número de servidores) e não uma curva contínua. Além disso, o desperdício \emph{satura}: com 2 a 3 servidores a mais que o mínimo os servidores já ficam bem equilibrados, e acrescentar mais apenas gasta energia --- por isso poucos pontos são não-dominados. A Figura~\ref{fig:forma} mostra a curva completa do compromisso: ela \emph{é} decrescente e convexa (o formato esperado de uma fronteira de Pareto), porém discreta e rasa, consequência direta de os dois objetivos serem quase alinhados.
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.96\textwidth]{figuras/forma_pareto.png}
+\caption{Curva completa do compromisso energia\,$\times$\,desperdício para duas correlações. A fronteira (linha vermelha) \emph{é} decrescente e convexa, mas \textbf{discreta} (energia em degraus de $162$\,W por servidor) e \textbf{curta} (o desperdício satura após poucos servidores a mais). Pontos cinzas: soluções dominadas. Os rótulos indicam o número de servidores de cada ponto da fronteira.}
+\label{fig:forma}\end{figure}
+
 \paragraph{Efeito da correlação.} O nível de correlação afeta a dificuldade do
 balanceamento. Em $P=0{,}75$ observa-se o maior desperdício para ambos
 (VMs com CPU e memória altas simultaneamente são difíceis de equilibrar), ao passo

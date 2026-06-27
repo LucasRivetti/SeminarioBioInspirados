@@ -1,13 +1,14 @@
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}\usepackage[T1]{fontenc}\usepackage{lmodern}
 \usepackage{amsmath,amssymb}
+\usepackage{graphicx}\usepackage{float}
 \usepackage[a4paper,margin=2.2cm]{geometry}
 \usepackage{xcolor}\usepackage{listings}\usepackage{mdframed}
 \usepackage{enumitem}\usepackage[hidelinks]{hyperref}\usepackage{titlesec}
 \definecolor{azul}{HTML}{0D47A1}\definecolor{verde}{HTML}{1B5E20}\definecolor{cinza}{HTML}{555555}
 \definecolor{codebg}{HTML}{F4F6F8}\definecolor{cmnt}{HTML}{2E7D32}\definecolor{kw}{HTML}{0D47A1}\definecolor{str}{HTML}{B71C1C}
 \definecolor{boxbg}{HTML}{EEF3F8}\definecolor{boxln}{HTML}{0D47A1}
-\renewcommand{\contentsname}{Sumário}\renewcommand{\tablename}{Tabela}
+\renewcommand{\contentsname}{Sumário}\renewcommand{\figurename}{Figura}\renewcommand{\tablename}{Tabela}
 \titleformat{\section}{\Large\bfseries\color{azul}}{\thesection}{0.6em}{}
 \titleformat{\subsection}{\large\bfseries\color{verde}}{\thesubsection}{0.6em}{}
 \newmdenv[backgroundcolor=boxbg,linecolor=boxln,linewidth=1pt,roundcorner=4pt,
@@ -352,6 +353,13 @@ energia \emph{e} pouco desperdício).
   ao mesmo tempo. Por isso o trade-off existe, mas é pequeno — e cada algoritmo
   sozinho converge para perto de um único ponto (o joelho).
 \end{itemize}
+
+\paragraph{``Mas não deveria parecer uma exponencial?''} Ótima pergunta --- e a resposta é \emph{sim}: uma fronteira de Pareto costuma ser uma curva decrescente e convexa (formato em ``L''). A nossa \textbf{é} desse formato (Figura~\ref{fig:formag}), com duas particularidades. \textbf{(i) É discreta:} a energia vale $\text{const}+162\cdot k$, com $k$ inteiro igual ao número de servidores; logo a fronteira são \emph{pontos} (de $162$\,W em $162$\,W), não uma curva contínua --- as curvas lisas dos livros vêm de problemas \emph{contínuos}. \textbf{(ii) É curta:} o desperdício \emph{satura} após uns 2--3 servidores a mais que o mínimo (os servidores já ficam equilibrados), então poucos pontos são não-dominados. Vemos, assim, apenas a \emph{parte inicial} daquela curva convexa.
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.97\textwidth]{forma_pareto.png}
+\caption{A fronteira de Pareto \emph{é} decrescente e convexa (linha vermelha), mas discreta (degraus de $162$\,W por servidor) e curta (o desperdício satura). Pontos cinzas: soluções dominadas; rótulos: número de servidores.}\label{fig:formag}
+\end{figure}
 
 \vspace{6pt}
 \begin{ideia}
