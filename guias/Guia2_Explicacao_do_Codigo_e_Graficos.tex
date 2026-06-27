@@ -1,0 +1,364 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}\usepackage[T1]{fontenc}\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{xcolor}\usepackage{listings}\usepackage{mdframed}
+\usepackage{enumitem}\usepackage[hidelinks]{hyperref}\usepackage{titlesec}
+\definecolor{azul}{HTML}{0D47A1}\definecolor{verde}{HTML}{1B5E20}\definecolor{cinza}{HTML}{555555}
+\definecolor{codebg}{HTML}{F4F6F8}\definecolor{cmnt}{HTML}{2E7D32}\definecolor{kw}{HTML}{0D47A1}\definecolor{str}{HTML}{B71C1C}
+\definecolor{boxbg}{HTML}{EEF3F8}\definecolor{boxln}{HTML}{0D47A1}
+\renewcommand{\contentsname}{Sumário}\renewcommand{\tablename}{Tabela}
+\titleformat{\section}{\Large\bfseries\color{azul}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{verde}}{\thesubsection}{0.6em}{}
+\newmdenv[backgroundcolor=boxbg,linecolor=boxln,linewidth=1pt,roundcorner=4pt,
+  innertopmargin=6pt,innerbottommargin=6pt,skipabove=8pt,skipbelow=8pt]{ideia}
+\lstset{
+ language=Python, basicstyle=\ttfamily\footnotesize, backgroundcolor=\color{codebg},
+ keywordstyle=\color{kw}\bfseries, commentstyle=\color{cmnt}\itshape, stringstyle=\color{str},
+ showstringspaces=false, breaklines=true, frame=single, framerule=0pt, xleftmargin=5pt,
+ aboveskip=6pt, belowskip=6pt, extendedchars=true, inputencoding=utf8,
+ literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1
+          {â}{{\^a}}1 {ê}{{\^e}}1 {ô}{{\^o}}1 {ã}{{\~a}}1 {õ}{{\~o}}1
+          {ç}{{\c c}}1 {à}{{\`a}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Ã}{{\~A}}1 {Ç}{{\c C}}1
+}
+
+\title{\textbf{Guia do Código, Linha a Linha}\\[3pt]
+\large Como cada parte funciona --- e como ler cada gráfico}
+\author{Material de apoio --- Seminário de Algoritmos Bioinspirados\\
+\small Lucas Rivetti \quad Ian Nunes}
+\date{Junho de 2026}
+
+\begin{document}
+\maketitle
+\begin{ideia}
+\textbf{Como usar este guia.} Para cada arquivo do projeto, explicamos o que ele
+faz, mostramos os trechos de código mais importantes e os traduzimos em
+português simples. No fim, há uma seção ensinando \textbf{como interpretar cada
+gráfico} gerado. Não é preciso saber programar para acompanhar: foque nos boxes
+azuis (a ``intuição'').
+\end{ideia}
+\tableofcontents
+\vspace{4pt}\hrule
+
+% =====================================================================
+\section{Visão geral: os arquivos e o fluxo}
+O projeto tem 6 módulos Python, cada um com uma responsabilidade:
+\begin{center}\small
+\begin{tabular}{ll}
+\hline
+\textbf{Arquivo} & \textbf{Responsabilidade} \\
+\hline
+\texttt{problema.py} & Define o problema: gera instâncias, avalia energia e desperdício. \\
+\texttt{metricas.py} & Dominância, fronteira de Pareto e as métricas (HV, IGD, ONVG, SP). \\
+\texttt{vmpacs.py} & O algoritmo de colônia de formigas (VMPACS). \\
+\texttt{nsga2.py} & O algoritmo genético NSGA-II (comparação). \\
+\texttt{referencia.py} & A fronteira de Pareto ``melhor conhecida'' (referência). \\
+\texttt{experimentos.py} & Roda tudo e gera as tabelas e figuras. \\
+\hline
+\end{tabular}
+\end{center}
+\textbf{Fluxo:} \texttt{experimentos.py} pede uma instância a \texttt{problema.py},
+roda \texttt{vmpacs.py} e \texttt{nsga2.py} sobre ela, mede a qualidade com
+\texttt{metricas.py}, calcula a referência com \texttt{referencia.py} e salva
+tabelas/figuras.
+
+\begin{ideia}
+\textbf{A ``solução'' em uma frase.} Tudo gira em torno de um vetor
+\texttt{aloc} de tamanho $n$: \texttt{aloc[i]} é o servidor que recebe a VM
+$i$. Por exemplo, \texttt{aloc = [0, 0, 1, 2, 1]} significa: VMs 0 e 1 no
+servidor 0; VM 2 no servidor 1; VM 3 no servidor 2; VM 4 no servidor 1.
+\end{ideia}
+
+% =====================================================================
+\section{\texttt{problema.py} --- o problema}
+\subsection{A classe \texttt{Instancia}}
+Guarda os dados de um cenário: demandas das VMs, número de servidores, limites e
+constantes de energia.
+\begin{lstlisting}
+class Instancia:
+    def __init__(self, Rp, Rm, m, Tp=0.9, Tm=0.9, P_idle=162.0, P_busy=215.0, eps=1e-4):
+        self.Rp = np.asarray(Rp)   # demanda de CPU de cada VM
+        self.Rm = np.asarray(Rm)   # demanda de memoria de cada VM
+        self.n = len(self.Rp)      # numero de VMs
+        self.m = m                 # numero de servidores disponiveis
+        self.Tp = Tp; self.Tm = Tm # limites de CPU e memoria (90%)
+        self.P_idle = P_idle; self.P_busy = P_busy   # potencias (W)
+        self.total_cpu = float(np.sum(self.Rp))      # CPU total (constante)
+\end{lstlisting}
+\begin{ideia}
+\texttt{total\_cpu} é a soma das CPUs de todas as VMs. Ela é \textbf{constante}
+(todas as VMs rodam) e, como vimos, é a chave para calcular a energia de forma
+exata.
+\end{ideia}
+
+\subsection{\texttt{gerar\_instancia} --- cria um cenário}
+Reproduz o gerador correlacionado do artigo: sorteia CPU e memória de cada VM e,
+conforme o parâmetro \texttt{P}, cria correlação entre elas.
+\begin{lstlisting}
+for i in range(n):
+    Rp[i] = rng.random() * (2 * Rp_ref)   # CPU em [0, 2*Rp_ref)
+    Rm[i] = rng.random() * Rm_ref         # memoria em [0, Rm_ref)
+    r = rng.random()
+    if (r < P and Rp[i] >= Rp_ref) or (r >= P and Rp[i] < Rp_ref):
+        Rm[i] = Rm[i] + Rm_ref            # cria a correlacao
+\end{lstlisting}
+\begin{ideia}
+\textbf{O que \texttt{P} faz:} \texttt{P}$\approx$0 gera correlação
+\emph{negativa} (CPU alta combina com memória baixa); \texttt{P}$\approx$1 gera
+correlação \emph{positiva} (alta com alta); \texttt{P}$\approx$0,5, quase nenhuma.
+Isso muda o quão difícil é equilibrar os servidores.
+\end{ideia}
+
+\subsection{\texttt{avaliar} --- calcula os dois objetivos}
+O coração da modelagem. Soma CPU e memória por servidor e calcula energia e
+desperdício.
+\begin{lstlisting}
+np.add.at(usado_cpu, aloc, inst.Rp)   # soma a CPU de cada VM no seu servidor
+np.add.at(usado_mem, aloc, inst.Rm)   # idem para memoria
+em_uso = usado_cpu > 0                 # servidores que receberam VMs
+k = int(np.count_nonzero(em_uso))      # quantos servidores estao ligados
+
+# Objetivo 1 (energia, forma exata): depende so do numero de servidores k
+energia = (inst.P_busy - inst.P_idle) * inst.total_cpu + inst.P_idle * k
+
+# Objetivo 2 (desperdicio): soma de |sobra_cpu - sobra_mem| / (usado)
+Lp = inst.Tp - usado_cpu[em_uso];  Lm = inst.Tm - usado_mem[em_uso]
+W_j = (np.abs(Lp - Lm) + inst.eps) / (usado_cpu[em_uso] + usado_mem[em_uso])
+desperdicio = float(np.sum(W_j))
+\end{lstlisting}
+\begin{ideia}
+\texttt{np.add.at(usado\_cpu, aloc, inst.Rp)} é um truque do NumPy: para cada VM
+\texttt{i}, soma \texttt{Rp[i]} na posição \texttt{aloc[i]} de \texttt{usado\_cpu}.
+No fim, \texttt{usado\_cpu[j]} = CPU total usada no servidor \texttt{j}. A energia
+usa a fórmula exata $(P_{busy}-P_{idle})\cdot\text{CPU total}+P_{idle}\cdot k$,
+sem ruído numérico. O desperdício é a soma dos $W_j$ dos servidores em uso.
+\end{ideia}
+
+\subsection{\texttt{first\_fit} e \texttt{first\_fit\_decreasing}}
+Heurística clássica de empacotamento: coloca cada VM no \emph{primeiro} servidor
+onde ela cabe; se não couber em nenhum, abre um novo.
+\begin{lstlisting}
+for i in ordem:                       # percorre as VMs na ordem dada
+    for j in range(len(cap_cpu)):     # tenta nos servidores ja abertos
+        if cabe(cap_cpu[j], cap_mem[j], inst.Rp[i], inst.Rm[i], inst):
+            cap_cpu[j] += inst.Rp[i]; cap_mem[j] += inst.Rm[i]
+            aloc[i] = j; colocado = True; break
+    if not colocado:                  # nao coube -> abre servidor novo
+        aloc[i] = len(cap_cpu); cap_cpu.append(inst.Rp[i]); cap_mem.append(inst.Rm[i])
+\end{lstlisting}
+O \texttt{first\_fit\_decreasing} (FFD) é o mesmo, mas ordena as VMs da maior
+demanda para a menor antes — costuma usar menos servidores. O FFD gera a solução
+inicial $S_0$ do VMPACS e serve de \emph{decodificador} do NSGA-II.
+
+% =====================================================================
+\section{\texttt{metricas.py} --- comparar fronteiras}
+\subsection{\texttt{domina} --- quem é melhor}
+\begin{lstlisting}
+def domina(a, b):
+    # 'a' domina 'b' se nao e pior em nada E e melhor em algo (minimizacao)
+    return np.all(a <= b) and np.any(a < b)
+\end{lstlisting}
+\begin{ideia}
+Tradução direta da definição de Pareto: \texttt{a} domina \texttt{b} se
+\texttt{a} é $\le$ \texttt{b} em todos os objetivos \emph{e} estritamente menor em
+pelo menos um.
+\end{ideia}
+
+\subsection{\texttt{frente\_nao\_dominada} --- acha a fronteira}
+Marca como ``dominada'' toda solução que alguém domina; sobram as não-dominadas.
+\begin{lstlisting}
+for i in range(n):
+    for j in range(n):
+        if i != j and nao_dom[j] and domina(pontos[j], pontos[i]):
+            nao_dom[i] = False; break   # alguem domina i -> i sai da fronteira
+\end{lstlisting}
+
+\subsection{As quatro métricas}
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \texttt{onvg(frente)} = \texttt{len(frente)}: número de soluções
+  (maior = melhor).
+  \item \texttt{spacing(frente)}: desvio-padrão das distâncias ao vizinho mais
+  próximo (menor = mais uniforme).
+  \item \texttt{hipervolume(frente, ref)}: área dominada pela fronteira em
+  relação a um ponto de referência (maior = melhor). Para 2 objetivos, soma
+  faixas:
+\begin{lstlisting}
+f = f[np.argsort(f[:, 0])]   # ordena por energia
+hv = 0.0; prev_y = ref[1]
+for x, y in f:
+    hv += (ref[0] - x) * (prev_y - y)   # area de cada retangulo
+    prev_y = y
+\end{lstlisting}
+  \item \texttt{igd(frente, referencia)}: distância média da fronteira de
+  \emph{referência} até a fronteira obtida (menor = melhor; mede o quão perto a
+  solução chegou da ideal).
+\end{itemize}
+
+% =====================================================================
+\section{\texttt{vmpacs.py} --- a colônia de formigas}
+\subsection{\texttt{construir\_solucao} --- uma formiga monta uma alocação}
+É o trecho mais importante. A formiga abre um servidor e o enche escolhendo VMs;
+quando nada mais cabe, abre o próximo.
+\begin{lstlisting}
+while disp.any():                 # enquanto houver VMs nao alocadas
+    host_cpu = 0.0; host_mem = 0.0 # abre um servidor novo (vazio)
+    while True:
+        # candidatas: VMs disponiveis que CABEM no servidor atual
+        cand = np.where(disp & (host_cpu+Rp <= Tp) & (host_mem+Rm <= Tm))[0]
+        if len(cand) == 0: break  # nada mais cabe -> fecha o servidor
+        # HEURISTICA: contribuicao parcial aos 2 objetivos (energia e desperdicio)
+        eta = eta1 + eta2
+        # combina FEROMONIO + HEURISTICA
+        score = alpha * tau[cand, host] + (1 - alpha) * eta
+        # REGRA: q<=q0 escolhe o melhor (intensifica); senao sorteia (explora)
+        if rng.random() <= q0:  escolhida = cand[np.argmax(score)]
+        else:                   escolhida = rng.choice(cand, p=score/score.sum())
+        # aplica o movimento e a ATUALIZACAO LOCAL do feromonio
+        aloc[escolhida] = host; disp[escolhida] = False
+        tau[escolhida, host] = (1-rho_l)*tau[escolhida, host] + rho_l*tau0
+\end{lstlisting}
+\begin{ideia}
+Linha a linha: (1) acha as VMs que cabem; (2) calcula a heurística $\eta$ (quanto
+cada VM ajuda nos dois objetivos); (3) soma feromônio e heurística no
+\texttt{score}; (4) com prob.\ \texttt{q0} pega a de maior \texttt{score}
+(intensifica), senão sorteia proporcional (explora); (5) coloca a VM e evapora um
+pouco do feromônio daquele movimento (atualização local).
+\end{ideia}
+
+\subsection{\texttt{vmpacs} --- o laço principal}
+\begin{lstlisting}
+S0 = first_fit_decreasing(inst)            # solucao inicial (FFD)
+tau0 = 1.0 / (n * (P_S0 + W_S0))           # feromonio inicial
+tau = np.full((n, m), tau0)
+for t in range(1, M + 1):                  # M iteracoes
+    for _ in range(NA):                    # NA formigas constroem solucoes
+        aloc = construir_solucao(...)
+        atualizar_arquivo(arquivo, objs, aloc, t)   # guarda nao-dominadas
+    for item in arquivo:                   # ATUALIZACAO GLOBAL (so as de Pareto)
+        reforco = rho_g * lam / (P_S + W_S)
+        tau[i, j] = (1-rho_g)*tau[i, j] + reforco
+\end{lstlisting}
+\begin{ideia}
+A cada iteração, todas as formigas constroem soluções; as não-dominadas entram no
+\texttt{arquivo} (a fronteira de Pareto); depois, só essas soluções
+\emph{reforçam} o feromônio dos seus movimentos. Assim a colônia ``aprende''.
+\end{ideia}
+
+% =====================================================================
+\section{\texttt{nsga2.py} --- o algoritmo genético}
+\subsection{\texttt{ordenacao\_nao\_dominada} --- separa em frentes}
+Classifica a população: frente 0 = não-dominados; frente 1 = os dominados só pela
+frente 0; e assim por diante.
+\begin{lstlisting}
+for p in range(n):
+    for q in range(n):
+        if domina(objs[p], objs[q]): S[p].append(q)   # p domina q
+        elif domina(objs[q], objs[p]): cont[p] += 1    # alguem domina p
+    if cont[p] == 0: frentes[0].append(p)              # p e nao-dominado
+\end{lstlisting}
+
+\subsection{\texttt{distancia\_multidao} --- mantém diversidade}
+Mede o quão ``isolada'' cada solução está. As das pontas recebem distância
+infinita (são sempre preservadas), as do meio recebem a distância entre os
+vizinhos. Isso evita que todas as soluções se amontoem num ponto só.
+
+\subsection{\texttt{crossover\_ox} e \texttt{mutacao\_swap} --- gerar filhos}
+Cada indivíduo é uma \textbf{permutação} das VMs (uma ordem). O \emph{Order
+Crossover} copia uma fatia de um pai e completa com a ordem do outro; a mutação
+troca duas posições. O laço principal (\texttt{nsga2}) repete: gera filhos, junta
+com os pais e mantém os \texttt{pop} melhores (por frente e diversidade).
+
+\begin{ideia}
+\textbf{Diferença para o VMPACS:} o VMPACS \emph{constrói} soluções com feromônio;
+o NSGA-II \emph{evolui} uma população por cruzamento e mutação. Os dois buscam a
+mesma fronteira de Pareto, por caminhos diferentes.
+\end{ideia}
+
+% =====================================================================
+\section{\texttt{referencia.py} --- a fronteira ``melhor conhecida''}
+Serve para \emph{visualizar} o trade-off real. Para cada número de servidores
+\texttt{k}, distribui as VMs entre os \texttt{k} servidores buscando equilíbrio, e
+refina com busca local.
+\begin{lstlisting}
+for k in range(kmin, kmin + extra + 1):   # varre numeros de servidores
+    # varias tentativas: espalha as VMs entre k servidores, balanceando
+    a = aloc_k_bins(rng.permutation(n), k, inst)
+    # ... guarda a de menor desperdicio e refina com busca_local
+    melhor = busca_local(melhor, inst, iters_local, rng)
+return pontos_nao_dominados(np.array(solucoes))
+\end{lstlisting}
+\texttt{busca\_local} tenta mover VMs entre servidores já usados para reduzir o
+desperdício total. Variando \texttt{k}, traça-se a curva de compromisso completa.
+
+% =====================================================================
+\section{\texttt{experimentos.py} --- rodar tudo}
+\begin{lstlisting}
+python3 experimentos.py run 0   # roda a correlacao P=0.0 (e salva parcial)
+python3 experimentos.py run 1   # P=0.25  ...  ate  run 4 (P=1.0)
+python3 experimentos.py agg     # junta tudo: gera tabelas (CSV) e figuras (PNG)
+\end{lstlisting}
+Para cada correlação, ele roda VMPACS e NSGA-II 10 vezes, calcula as 4 métricas,
+e salva. O \texttt{agg} desenha os gráficos de barras e a fronteira de Pareto.
+
+% =====================================================================
+\section{Como ler cada gráfico}
+Todos os gráficos comparam \textcolor{red}{\textbf{VMPACS (vermelho)}} e
+\textbf{NSGA-II (azul-escuro)} nos 5 níveis de correlação \texttt{P} (eixo
+horizontal; o número entre parênteses é o coeficiente de correlação aproximado,
+de $-0{,}75$ a $+0{,}75$). As barras têm \emph{barras de erro} (o desvio entre as
+10 execuções).
+
+\subsection{Gráficos de barras de energia, desperdício e servidores}
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{Energia (W)} e \textbf{Desperdício} e \textbf{nº de Servidores}:
+  em todos, \textbf{barra mais baixa = melhor}.
+  \item Como ler: para cada \texttt{P}, compare as duas barras. A menor é o
+  algoritmo que gastou menos / desperdiçou menos / usou menos servidores naquele
+  cenário.
+  \item O que esperar: o NSGA-II costuma ter barras um pouco menores (converge
+  para soluções de menor energia e desperdício); em $P=0{,}5$ o VMPACS empata ou
+  ganha no desperdício.
+\end{itemize}
+
+\subsection{Gráficos de Hipervolume e IGD}
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{Hipervolume (HV)}: \textbf{barra mais ALTA = melhor} (cobre mais
+  área boa do espaço de objetivos). É a única em que ``maior é melhor''.
+  \item \textbf{IGD}: \textbf{barra mais BAIXA = melhor} (chegou mais perto da
+  fronteira de referência).
+  \item Como ler: HV alto \emph{e} IGD baixo indicam o algoritmo que melhor se
+  aproximou do ideal. Nas figuras, o NSGA-II tem HV maior e IGD menor na maioria
+  das correlações.
+\end{itemize}
+
+\subsection{Gráfico das fronteiras de Pareto}
+\begin{ideia}
+Este é o gráfico-chave do trabalho. \textbf{Eixos:} horizontal = energia (W);
+vertical = desperdício. \textbf{O canto inferior-esquerdo é o melhor} (pouca
+energia \emph{e} pouco desperdício).
+\end{ideia}
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item A \textbf{curva cinza} (``fronteira melhor conhecida'') mostra o
+  \emph{trade-off real}: cada ponto é um compromisso (menos energia $\to$ mais
+  desperdício, e vice-versa). Ela tem vários pontos justamente porque é a curva
+  completa de melhores trocas.
+  \item Os \textbf{marcadores} (quadrado vermelho = VMPACS; losango azul =
+  NSGA-II) mostram \emph{onde cada algoritmo converge}.
+  \item Como ler: quanto mais para baixo e para a esquerda, melhor. O NSGA-II
+  costuma ``encostar'' na curva (no joelho de menor energia); o VMPACS fica um
+  pouco acima dela (minimiza servidores, mas equilibra um pouco menos).
+  \item \textbf{Por que a curva é ``rasa''?} Porque, nestas instâncias, os dois
+  objetivos quase não conflitam: empacotar bem reduz energia \emph{e} desperdício
+  ao mesmo tempo. Por isso o trade-off existe, mas é pequeno — e cada algoritmo
+  sozinho converge para perto de um único ponto (o joelho).
+\end{itemize}
+
+\vspace{6pt}
+\begin{ideia}
+\textbf{Resumo de ``o que é melhor'' em cada gráfico:} energia, desperdício,
+servidores, IGD e Spacing $\to$ \textbf{menor é melhor}; ONVG e Hipervolume
+$\to$ \textbf{maior é melhor}; nas fronteiras $\to$ \textbf{inferior-esquerda é
+melhor}.
+\end{ideia}
+
+\end{document}

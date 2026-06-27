@@ -1,0 +1,498 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}\usepackage[T1]{fontenc}\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{booktabs}\usepackage{xcolor}\usepackage{mdframed}
+\usepackage{enumitem}\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\definecolor{azul}{HTML}{0D47A1}\definecolor{verde}{HTML}{1B5E20}\definecolor{cinza}{HTML}{555555}
+\definecolor{boxbg}{HTML}{EEF3F8}\definecolor{boxln}{HTML}{0D47A1}
+\renewcommand{\figurename}{Figura}\renewcommand{\tablename}{Tabela}
+\renewcommand{\contentsname}{Sumário}
+\titleformat{\section}{\Large\bfseries\color{azul}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{verde}}{\thesubsection}{0.6em}{}
+\newmdenv[backgroundcolor=boxbg,linecolor=boxln,linewidth=1pt,roundcorner=4pt,
+  innertopmargin=6pt,innerbottommargin=6pt,skipabove=8pt,skipbelow=8pt]{ideia}
+\newcommand{\var}[1]{\textcolor{azul}{$#1$}}
+
+\title{\textbf{Guia de Estudo Completo do Artigo}\\[3pt]
+\large ``A multi-objective ant colony system algorithm for virtual machine
+placement in cloud computing'' --- Gao et al. (2013)}
+\author{Material de apoio --- Seminário de Algoritmos Bioinspirados\\
+\small Lucas Rivetti \quad Ian Nunes}
+\date{Junho de 2026}
+
+\begin{document}
+\maketitle
+\begin{ideia}
+\textbf{Como usar este guia.} Ele explica, do zero e em ordem, tudo que importa
+no artigo: os \emph{conceitos} (nuvem, virtualização, alocação de VMs,
+otimização multiobjetivo, colônia de formigas), a \emph{formulação matemática}
+com o significado de \textbf{cada variável}, o \emph{algoritmo VMPACS} passo a
+passo, e os \emph{experimentos, métricas e resultados}. No fim há um
+\textbf{glossário de símbolos} e uma seção de \textbf{prováveis perguntas da
+banca}. Os boxes azuis trazem a ``intuição'' de cada ideia.
+\end{ideia}
+\tableofcontents
+\vspace{4pt}\hrule
+
+% =====================================================================
+\section{Visão geral em um parágrafo}
+O artigo ataca o problema de \textbf{onde colocar cada máquina virtual (VM)} num
+\emph{data center} de nuvem. Colocar bem as VMs importa porque define quanta
+\textbf{energia} o data center gasta e o quanto de \textbf{recurso} (CPU e
+memória) é desperdiçado. Como esses dois objetivos competem, o problema é
+\emph{multiobjetivo}: não existe uma única solução ótima, mas um conjunto de bons
+compromissos (a \emph{fronteira de Pareto}). Os autores propõem o \textbf{VMPACS},
+uma \emph{colônia de formigas} adaptada para achar esse conjunto, e mostram que
+ele supera um algoritmo genético (MGGA) e dois métodos de objetivo único (FFD e
+SACO).
+
+% =====================================================================
+\section{Conceitos de base: computação em nuvem}
+\subsection{Os três modelos de nuvem}
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{IaaS} (Infraestrutura como Serviço): você aluga máquinas/recursos
+  (ex.: Amazon EC2). É o nível em que vive o problema do artigo.
+  \item \textbf{PaaS} (Plataforma como Serviço): você aluga um ambiente pronto
+  para rodar aplicações.
+  \item \textbf{SaaS} (Software como Serviço): você usa um software pela internet
+  (ex.: Gmail).
+\end{itemize}
+
+\subsection{Virtualização, hypervisor e VM}
+\textbf{Virtualização} é a técnica que divide um servidor físico em vários
+ambientes isolados, as \textbf{máquinas virtuais (VMs)}. Um programa chamado
+\textbf{hypervisor} controla esse compartilhamento. Assim, várias aplicações
+rodam ``lado a lado'' no mesmo hardware, cada uma achando que tem um computador
+só para si. Isso permite \emph{computação sob demanda}: aloca-se CPU, memória e
+disco conforme a necessidade, em vez de reservar tudo para o pico.
+
+\begin{ideia}
+\textbf{Intuição.} Pense num prédio de servidores. Sem virtualização, cada
+aplicação ocupa um andar inteiro (desperdício). Com virtualização, várias
+aplicações dividem um andar — desde que a soma do que elas usam caiba.
+\end{ideia}
+
+\subsection{Por que energia e desperdício importam}
+A energia \textbf{domina o custo operacional} de um data center e gera
+\textbf{CO\textsubscript{2}} e problemas de confiabilidade. Logo, o provedor quer
+ligar o \emph{menor número de servidores} possível (e desligar os ociosos). Ao
+mesmo tempo, precisa \emph{aproveitar bem} CPU e memória dos servidores ligados
+— senão liga poucos servidores mas usa mal cada um.
+
+% =====================================================================
+\section{O problema central: alocação de VMs (\emph{VM placement})}
+\textbf{Alocação de VMs} é o processo de \textbf{mapear cada VM a um servidor
+físico}. O exemplo da Figura~1 do artigo: 7 servidores com 1 VM cada (uso de
+15\% a 50\%) são \textbf{consolidados} em apenas 3 servidores bem ocupados
+(95\%). Resultado: menos máquinas ligadas, menos energia.
+
+\subsection{Por que é difícil (NP-difícil)}
+O problema é uma variante do \textbf{empacotamento vetorial}
+(\emph{vector bin packing}): empacotar ``itens'' (VMs) com duas dimensões (CPU e
+memória) em ``caixas'' (servidores) de capacidade limitada. Para \var{n} VMs e
+\var{m} servidores há \var{m^n} alocações possíveis — explosão combinatória.
+Por isso não dá para testar todas; usam-se \textbf{meta-heurísticas} (métodos
+inteligentes de busca aproximada), como a colônia de formigas.
+
+\subsection{Abordagens da literatura (citadas no artigo)}
+Programação linear, algoritmos genéticos, programação por restrições e
+heurísticas de \emph{bin packing} (como o \textbf{First-Fit Decreasing, FFD}).
+A maioria otimiza \emph{um} critério; o artigo é dos primeiros a tratar
+\textbf{dois objetivos} (energia e desperdício) com colônia de formigas.
+
+% =====================================================================
+\section{Otimização multiobjetivo (a teoria por trás)}
+Quando há \textbf{vários objetivos que competem}, melhorar um pode piorar o
+outro. Não existe ``a melhor solução''; existe um \emph{conjunto} das melhores
+trocas possíveis.
+
+\subsection{Vocabulário formal}
+Para um problema de minimização com \var{m} variáveis de decisão e \var{n}
+objetivos:
+\[
+\text{Minimizar}\quad \vec{f}(\vec{x}) = \big(f_1(\vec{x}),\dots,f_n(\vec{x})\big),
+\qquad \vec{x}=(x_1,\dots,x_m)\in X,\ \ \vec{f}\in Y.
+\]
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{\vec{x}}: \textbf{vetor de decisão} (a ``solução'' — aqui, qual VM
+  vai em qual servidor). \var{X}: espaço de decisão (todas as soluções possíveis).
+  \item \var{\vec{f}}: \textbf{vetor objetivo} (os valores dos objetivos daquela
+  solução — aqui, energia e desperdício). \var{Y}: espaço de objetivos.
+\end{itemize}
+
+\subsection{Dominância de Pareto}
+Uma solução \var{\vec{x}_1} \textbf{domina} \var{\vec{x}_2} se as duas condições
+valem:
+\begin{enumerate}[leftmargin=1.6em,itemsep=1pt]
+  \item \var{\vec{x}_1} \textbf{não é pior} que \var{\vec{x}_2} em \emph{nenhum}
+  objetivo; \emph{e}
+  \item \var{\vec{x}_1} é \textbf{estritamente melhor} em \emph{pelo menos um}
+  objetivo.
+\end{enumerate}
+
+\begin{ideia}
+\textbf{Exemplo.} Solução A = (energia 100, desperdício 5); B = (energia 120,
+desperdício 8). A domina B (melhor nos dois). Mas se C = (energia 130,
+desperdício 3), A \emph{não} domina C (A gasta menos energia, porém C desperdiça
+menos): são \textbf{não-dominadas} entre si — ambas são compromissos válidos.
+\end{ideia}
+
+\subsection{Fronteira de Pareto}
+O conjunto de todas as soluções \textbf{não-dominadas} forma a \textbf{fronteira
+de Pareto} (no espaço de objetivos) e o \textbf{conjunto de Pareto} (no espaço de
+decisão). É a ``curva de melhores trocas''. O artigo usa este procedimento para
+identificar não-dominadas em um conjunto de \var{N} soluções: para cada solução
+\var{i}, compara com todas as outras; se alguma \var{j} a domina, marca \var{i}
+como dominada; ao fim, as não marcadas são as não-dominadas.
+
+% =====================================================================
+\section{Colônia de Formigas (ACO)}
+\textbf{ACO} (\emph{Ant Colony Optimization}) é uma meta-heurística inspirada no
+comportamento real das formigas ao procurar comida.
+
+\subsection{A metáfora biológica}
+Formigas exploram ao redor do ninho ``aleatoriamente''. Ao andar, depositam
+\textbf{feromônio} (uma substância química) no caminho. Elas tendem a seguir
+caminhos com \emph{mais} feromônio. Como o caminho mais curto é percorrido mais
+vezes no mesmo tempo, ele acumula mais feromônio e atrai mais formigas — e a
+colônia ``descobre'' coletivamente o melhor caminho. Essa comunicação indireta
+pelo ambiente chama-se \textbf{estigmergia}.
+
+\begin{ideia}
+\textbf{Tradução para o algoritmo.} ``Caminho'' = uma sequência de decisões
+(aqui, colocar cada VM em um servidor). ``Feromônio'' = memória numérica de quais
+decisões apareceram em boas soluções. Boas decisões ganham feromônio e tendem a
+ser repetidas pelas próximas ``formigas'' (tentativas).
+\end{ideia}
+
+\subsection{Variantes e a versão multiobjetivo}
+Existem o \emph{Ant System} (AS), o \textbf{Ant Colony System (ACS)} --- base do
+VMPACS --- e o MMAS. Para vários objetivos, as variantes diferem em três pontos:
+(i) \textbf{quais soluções atualizam o feromônio} (as melhores de cada objetivo,
+ou só as não-dominadas guardadas num arquivo externo); (ii) \textbf{como o
+feromônio/heurística é definido} (uma matriz combinada, ou uma matriz por
+objetivo); (iii) \textbf{como agregar} (soma ponderada, produto ou objetivo
+sorteado). O VMPACS usa \emph{uma} matriz de feromônio, \emph{soma} as
+heurísticas dos dois objetivos e deixa \emph{só as não-dominadas} reforçarem.
+
+% =====================================================================
+\section{Modelagem dos recursos e dos dois objetivos}
+Cada servidor tem \textbf{duas dimensões} de recurso: \textbf{CPU} e
+\textbf{memória}. Se duas VMs $(20\%,30\%)$ e $(35\%,40\%)$ ficam no mesmo
+servidor, o uso vira a \emph{soma} $(55\%,70\%)$. Impõe-se um \textbf{limite}
+(\emph{threshold}) abaixo de 100\% (no artigo, 90\%) porque rodar no talo degrada
+o desempenho e a migração de VMs consome CPU.
+
+\subsection{Objetivo 2: desperdício de recursos \texorpdfstring{$W_j$}{Wj}}
+\begin{equation*}
+W_j=\frac{\,\big|L^p_j-L^m_j\big|+\varepsilon\,}{U^p_j+U^m_j}
+\end{equation*}
+Significado de cada símbolo (para o servidor \var{j}):
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{U^p_j}: \textbf{CPU usada} (normalizada) — soma das CPUs das VMs nele.
+  \item \var{U^m_j}: \textbf{memória usada} (normalizada).
+  \item \var{L^p_j}: \textbf{CPU que sobrou} (\emph{remaining}) $= T^p_j-U^p_j$.
+  \item \var{L^m_j}: \textbf{memória que sobrou} $= T^m_j-U^m_j$.
+  \item \var{\varepsilon}: número pequeno ($0{,}0001$) só para \textbf{evitar
+  divisão por zero}.
+\end{itemize}
+\begin{ideia}
+\textbf{Por que essa fórmula?} O numerador \var{|L^p_j-L^m_j|} mede o
+\textbf{desbalanceamento}: se sobra muita CPU mas pouca memória (ou vice-versa),
+esse servidor está ``torto'' e desperdiça. O denominador \var{U^p_j+U^m_j}
+premia servidores \textbf{bem ocupados}. Logo, \var{W_j} é pequeno quando o
+servidor está \emph{cheio e equilibrado}, e grande quando está \emph{vazio ou
+desbalanceado}. Minimizar $\sum_j W_j$ = empacotar de forma cheia e equilibrada.
+\end{ideia}
+
+\subsection{Objetivo 1: consumo de energia \texorpdfstring{$P_j$}{Pj}}
+\begin{equation*}
+P_j=\begin{cases}(P^{busy}_j-P^{idle}_j)\,U^p_j+P^{idle}_j, & U^p_j>0\\[2pt]0,&\text{caso contrário.}\end{cases}
+\end{equation*}
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{P^{idle}_j}: potência do servidor \textbf{ocioso} (ligado, sem
+  carga). No artigo, \textbf{162\,W}.
+  \item \var{P^{busy}_j}: potência do servidor em \textbf{uso pleno}.
+  \textbf{215\,W}.
+  \item \var{U^p_j}: utilização de CPU (a potência cresce \emph{linearmente} com
+  ela — fato medido em servidores reais).
+\end{itemize}
+\begin{ideia}
+\textbf{Consequência importante.} Servidores ociosos são \emph{desligados}
+($P_j=0$). Somando sobre os servidores ligados, a energia total vira
+$(P^{busy}-P^{idle})\cdot(\text{CPU total}) + P^{idle}\cdot k$, onde \var{k} é o
+\textbf{número de servidores ligados}. Como a CPU total é fixa (todas as VMs
+precisam rodar), \textbf{a energia depende basicamente de quantos servidores
+estão ligados}. Por isso ``minimizar energia'' $\approx$ ``usar menos servidores''.
+\end{ideia}
+
+% =====================================================================
+\section{Formulação matemática completa}
+\textbf{Dados:} \var{n} VMs ($i\in I$) e \var{m} servidores ($j\in J$).
+\textbf{Parâmetros:} \var{R^p_i} (demanda de CPU da VM $i$), \var{R^m_i} (demanda
+de memória), \var{T^p_j} e \var{T^m_j} (limites de CPU e memória do servidor),
+\var{P^{idle}}, \var{P^{busy}}, \var{\varepsilon}.
+
+\textbf{Variáveis de decisão:}
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{x_{ij}\in\{0,1\}}: vale \textbf{1 se a VM $i$ vai no servidor $j$},
+  senão 0.
+  \item \var{y_j\in\{0,1\}}: vale \textbf{1 se o servidor $j$ está em uso},
+  senão 0.
+\end{itemize}
+\textbf{Os dois objetivos (minimizar):}
+\begin{align*}
+f_1 &= \sum_{j=1}^{m} y_j\!\left[(P^{busy}_j-P^{idle}_j)\sum_{i=1}^{n} x_{ij}R^p_i + P^{idle}_j\right] && \text{(energia)}\\
+f_2 &= \sum_{j=1}^{m} y_j\,\frac{\big|(T^p_j-\sum_i x_{ij}R^p_i)-(T^m_j-\sum_i x_{ij}R^m_i)\big|+\varepsilon}{\sum_i x_{ij}R^p_i+\sum_i x_{ij}R^m_i} && \text{(desperdício)}
+\end{align*}
+Repare que $\sum_i x_{ij}R^p_i$ é exatamente \var{U^p_j} (a CPU usada no servidor
+$j$), e $T^p_j-\sum_i x_{ij}R^p_i$ é \var{L^p_j} (a CPU que sobrou). É a mesma
+fórmula da seção anterior, escrita com as variáveis de decisão.
+
+\textbf{Restrições:}
+\begin{align*}
+&\sum_{j=1}^{m} x_{ij}=1, &&\forall i && \text{(2) cada VM em \textbf{exatamente um} servidor}\\
+&\sum_{i=1}^{n} R^p_i x_{ij}\le T^p_j\,y_j, &&\forall j && \text{(3) não estourar a \textbf{CPU} do servidor}\\
+&\sum_{i=1}^{n} R^m_i x_{ij}\le T^m_j\,y_j, &&\forall j && \text{(4) não estourar a \textbf{memória}}\\
+&x_{ij},\,y_j\in\{0,1\} &&\forall i,j && \text{(5) variáveis binárias}
+\end{align*}
+Nas restrições (3) e (4), o $y_j$ do lado direito garante que, se o servidor não
+está em uso ($y_j=0$), nada pode ser alocado nele.
+
+% =====================================================================
+\section{O algoritmo VMPACS (passo a passo)}
+Uma ``formiga'' constrói uma alocação completa. Um \textbf{movimento} é colocar
+a VM $i$ no servidor $j$ (notação \emph{VM-Host}). A qualidade da formiga é dada
+pelos dois objetivos $(f_1,f_2)$.
+
+\subsection{Feromônio \texorpdfstring{$\tau_{ij}$}{tau} e seu valor inicial \texorpdfstring{$\tau_0$}{tau0}}
+\var{\tau_{ij}} = ``vontade'' de colocar a VM $i$ no $j$-ésimo servidor aberto.
+Começa todo igual a:
+\[
+\tau_0=\frac{1}{n\,\big(P'(S_0)+W(S_0)\big)}
+\]
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{S_0}: solução inicial dada pela heurística \textbf{FFD}
+  (First-Fit Decreasing): ordena as VMs da maior para a menor e coloca cada uma
+  no primeiro servidor onde cabe.
+  \item \var{W(S_0)}: desperdício dessa solução inicial.
+  \item \var{P'(S_0)=\sum_j P_j/P^{Max}_j}: potência \emph{normalizada}
+  ($P^{Max}_j$ = potência de pico). Serve para deixar energia e desperdício na
+  mesma escala.
+  \item \var{n}: número de VMs.
+\end{itemize}
+\begin{ideia}
+\textbf{Por quê?} Define um nível de feromônio de partida coerente com a
+qualidade de uma solução ``razoável'' (a do FFD). Nem alto nem baixo demais.
+\end{ideia}
+
+\subsection{Heurística \texorpdfstring{$\eta_{ij}$}{eta} (o ``conhecimento do problema'')}
+Enquanto o feromônio é \emph{aprendido}, a heurística é \emph{calculada} e
+indica o quão promissor é um movimento agora. Ela soma a contribuição parcial
+aos dois objetivos:
+\[
+\eta_{ij}=\eta_{ij}^{(1)}+\eta_{ij}^{(2)},\qquad
+\eta_{ij}^{(1)}=\frac{1}{\varepsilon+\sum_{v=1}^{j}P_v/P^{Max}_v},\qquad
+\eta_{ij}^{(2)}=\frac{1}{\varepsilon+\sum_{v=1}^{j}W_v}.
+\]
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{\eta_{ij}^{(1)}}: liga-se ao \textbf{objetivo energia}. As somas
+  $\sum_{v=1}^{j}$ percorrem os servidores já abertos (1 até $j$). Quanto
+  \emph{menor} a energia parcial, \emph{maior} fica $\eta^{(1)}$ (note o $1/(\cdots)$).
+  \item \var{\eta_{ij}^{(2)}}: liga-se ao \textbf{desperdício}. Mesma ideia: menos
+  desperdício parcial $\Rightarrow$ heurística maior.
+\end{itemize}
+\begin{ideia}
+\textbf{Resumo:} $\eta_{ij}$ é grande para movimentos que mantêm energia
+\emph{e} desperdício baixos — exatamente o que queremos.
+\end{ideia}
+
+\subsection{Como a formiga escolhe (regra pseudoaleatória proporcional)}
+Para escolher a próxima VM a colocar no servidor atual, sorteia-se um número
+$q\in[0,1]$ e compara-se com o parâmetro \var{q_0}:
+\[
+i=\begin{cases}
+\displaystyle\arg\max_{u\in\Omega_k(j)}\big\{\alpha\,\tau_{uj}+(1-\alpha)\,\eta_{uj}\big\}, & q\le q_0\ \ (\textbf{intensificação})\\[8pt]
+s\ \text{sorteado por } p^k_{ij}=\dfrac{\alpha\,\tau_{ij}+(1-\alpha)\,\eta_{ij}}{\sum_{u\in\Omega_k(j)}\alpha\,\tau_{uj}+(1-\alpha)\,\eta_{uj}}, & q>q_0\ \ (\textbf{exploração})
+\end{cases}
+\]
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{\alpha}: peso (entre 0 e 1) que equilibra \textbf{feromônio} ($\tau$,
+  o aprendido) \emph{vs.} \textbf{heurística} ($\eta$, o calculado). No artigo,
+  $\alpha=0{,}45$.
+  \item \var{q_0}: limiar (no artigo $0{,}8$). Com prob.\ $q_0$ a formiga
+  \textbf{intensifica} (escolhe o melhor movimento conhecido); com prob.\ $1-q_0$
+  ela \textbf{explora} (sorteia, para não ficar presa).
+  \item \var{\Omega_k(j)}: conjunto das VMs que \emph{ainda cabem} no servidor
+  atual $j$ (respeitando os limites de CPU e memória).
+\end{itemize}
+
+\subsection{Atualização do feromônio (local e global)}
+\textbf{Local} (Eq.~8) --- aplicada \emph{logo após} cada movimento:
+\[
+\tau_{ij}\leftarrow(1-\rho_l)\,\tau_{ij}+\rho_l\,\tau_0
+\]
+Ela \emph{evapora} um pouco o feromônio do movimento recém-usado (puxando para
+$\tau_0$), o que \textbf{evita que todas as formigas sigam o mesmo caminho} e
+favorece a diversidade. \var{\rho_l} é a taxa de evaporação local.
+
+\textbf{Global} (Eq.~9) --- aplicada ao fim de cada iteração, \emph{só} para as
+soluções $S$ do arquivo de Pareto:
+\[
+\tau_{ij}\leftarrow(1-\rho_g)\,\tau_{ij}+\frac{\rho_g\,\lambda}{P'(S)+W(S)},
+\qquad \lambda=\frac{N_A}{t-N_{Is}+1}.
+\]
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{\rho_g}: taxa de evaporação global.
+  \item O termo $\frac{1}{P'(S)+W(S)}$ \textbf{reforça mais} os movimentos de
+  soluções \emph{melhores} (menor energia + desperdício).
+  \item \var{\lambda} (Eq.~10): coeficiente \emph{adaptativo}. \var{N_A} = número
+  de formigas; \var{t} = iteração atual; \var{N_{Is}} = iteração em que a solução
+  $S$ entrou no arquivo. Soluções que estão no arquivo há \emph{mais} tempo
+  contribuem \emph{menos} (o $\lambda$ diminui) — assim o algoritmo continua
+  aprendendo coisas novas.
+\end{itemize}
+
+\subsection{Pseudocódigo resumido}
+\begin{enumerate}[leftmargin=1.6em,itemsep=1pt]
+  \item Inicializa o arquivo de Pareto vazio e todo $\tau_{ij}=\tau_0$.
+  \item Repete por $M$ iterações:
+  \begin{enumerate}[leftmargin=1.4em,itemsep=0pt]
+    \item Cada uma das $N_A$ formigas: abre um servidor, enche-o escolhendo VMs
+    pela regra acima (aplicando a \emph{atualização local} a cada movimento),
+    abre o próximo servidor, e assim até alocar todas as VMs.
+    \item Avalia $(f_1,f_2)$ de cada formiga e atualiza o arquivo de não-dominadas.
+    \item Aplica a \emph{atualização global} usando as soluções do arquivo.
+  \end{enumerate}
+  \item Devolve o arquivo de Pareto.
+\end{enumerate}
+
+% =====================================================================
+\section{Metodologia experimental do artigo}
+\subsection{Geração das instâncias (com correlação CPU/memória)}
+Para cada VM $i$:
+\[
+R^p_i=\text{rand}(2\bar{R}_p);\quad R^m_i=\text{rand}(\bar{R}_m);\quad r=\text{rand}(1);
+\]
+\[
+\text{se } (r<P \wedge R^p_i\ge \bar{R}_p)\ \vee\ (r\ge P \wedge R^p_i<\bar{R}_p)\ \Rightarrow\ R^m_i\mathrel{+}=\bar{R}_m.
+\]
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{\bar{R}_p,\bar{R}_m}: valores de referência ($25\%$ ou $45\%$).
+  \item \var{P}: probabilidade que \textbf{controla a correlação} entre CPU e
+  memória. Para $\bar{R}=25\%$, os coeficientes de correlação ficam
+  $-0{,}754,\,-0{,}348,\,-0{,}072,\,0{,}371,\,0{,}755$ para
+  $P=0;\,0{,}25;\,0{,}5;\,0{,}75;\,1$ (de correlação \emph{negativa forte} a
+  \emph{positiva forte}).
+\end{itemize}
+
+\subsection{Parâmetros}
+VMPACS: $N_A=10$, $M=100$, $\alpha=0{,}45$, $\rho_l=\rho_g=0{,}35$, $q_0=0{,}8$.
+MGGA (o genético comparado): população 12, cruzamento 0{,}7, mutação 0{,}05, 10
+gerações. Instâncias com \textbf{200 VMs}, servidores = nº de VMs (pior caso),
+limites $T^p=T^m=90\%$, \textbf{20 execuções} independentes (média reportada).
+
+% =====================================================================
+\section{Métricas usadas no artigo}
+\subsection{ONVG --- quantas soluções a fronteira tem}
+\[
+\text{ONVG}=|Y_{known}|_c
+\]
+É a \textbf{cardinalidade} (número) de soluções não-dominadas encontradas.
+\textbf{Maior é melhor} (mais opções de compromisso). \var{Y_{known}} é a
+fronteira calculada; \var{|\cdot|_c} = contagem.
+
+\subsection{Spacing (SP) --- quão uniforme é o espaçamento}
+\[
+\text{SP}=\sqrt{\frac{1}{|Y_{known}|_c-1}\sum_{i}(\bar{d}-d_i)^2},\quad
+d_i=\min_{j\ne i}\sum_{m}\big|f^i_m-f^j_m\big|.
+\]
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \var{d_i}: distância (de Manhattan) da solução $i$ até a \emph{mais
+  próxima} da fronteira.
+  \item \var{\bar{d}}: média dos $d_i$. SP é o \emph{desvio-padrão} dos $d_i$.
+  \item \textbf{Menor é melhor}: SP perto de 0 significa pontos
+  \emph{uniformemente} distribuídos.
+\end{itemize}
+
+% =====================================================================
+\section{Resultados do artigo}
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{VMPACS vs.\ MGGA} (Tabela~1 do artigo): o VMPACS tem
+  \emph{maior} ONVG e \emph{menor} SP em todas as correlações — fronteiras mais
+  ricas e mais uniformes.
+  \item \textbf{VMPACS vs.\ FFD vs.\ SACO} (Tabela~2): o FFD (heurística simples)
+  gasta \emph{mais} energia e desperdício (usa mais servidores); o SACO
+  (formiga de objetivo único) fica no meio; o \textbf{VMPACS é o melhor} nos dois
+  objetivos, porque busca o espaço de forma global e acha soluções com menos
+  servidores e melhor aproveitamento.
+  \item \textbf{Escalabilidade} (Figura~4): resolve até \textbf{2000 VMs em menos
+  de 3 minutos} — adequado a data centers grandes.
+\end{itemize}
+
+% =====================================================================
+\section{Conclusão do artigo}
+O VMPACS obtém, de forma eficiente, um conjunto de soluções não-dominadas que
+minimizam \emph{ao mesmo tempo} energia e desperdício, supera um genético
+(MGGA) e dois métodos de objetivo único (FFD, SACO), e escala bem. É a primeira
+aplicação do ACS à alocação multiobjetivo de VMs.
+
+% =====================================================================
+\section{Glossário de símbolos}
+\begin{center}\small
+\begin{tabular}{ll}
+\toprule
+Símbolo & Significado \\
+\midrule
+$n,\ m$ & número de VMs e de servidores \\
+$i,\ j$ & índice de VM e de servidor \\
+$R^p_i,\ R^m_i$ & demanda de CPU e de memória da VM $i$ \\
+$T^p_j,\ T^m_j$ & limite (threshold) de CPU e memória do servidor $j$ (90\%) \\
+$U^p_j,\ U^m_j$ & CPU e memória \emph{usadas} no servidor $j$ \\
+$L^p_j,\ L^m_j$ & CPU e memória \emph{restantes} no servidor $j$ \\
+$x_{ij}$ & 1 se a VM $i$ está no servidor $j$ (senão 0) \\
+$y_j$ & 1 se o servidor $j$ está em uso (senão 0) \\
+$P_j$ & potência (energia) do servidor $j$ \\
+$P^{idle},\ P^{busy}$ & potência ociosa (162\,W) e em uso pleno (215\,W) \\
+$W_j$ & desperdício do servidor $j$ \\
+$\varepsilon$ & constante pequena ($10^{-4}$), evita divisão por 0 \\
+$\tau_{ij}$ & feromônio do movimento (VM $i$ $\to$ servidor $j$) \\
+$\tau_0$ & feromônio inicial \\
+$\eta_{ij}$ & heurística do movimento \\
+$\alpha$ & peso feromônio vs.\ heurística (0,45) \\
+$q_0$ & limiar intensificação/exploração (0,8) \\
+$\rho_l,\ \rho_g$ & taxas de evaporação local e global (0,35) \\
+$N_A,\ M$ & nº de formigas (10) e de iterações (100) \\
+$\lambda,\ N_{Is}$ & coef.\ adaptativo e iteração de entrada no arquivo \\
+$\bar{R}_p,\ \bar{R}_m,\ P$ & referências e prob.\ de correlação (instâncias) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% =====================================================================
+\section{Prováveis perguntas da banca (e respostas)}
+\begin{itemize}[leftmargin=1.4em,itemsep=4pt]
+  \item \textbf{Por que é multiobjetivo e não só ``gastar menos energia''?}
+  Porque minimizar energia (poucos servidores) pode piorar o aproveitamento
+  (desbalanceamento). Tratar os dois juntos dá ao operador um leque de
+  compromissos.
+  \item \textbf{O que é a fronteira de Pareto, em uma frase?} O conjunto das
+  soluções em que não dá para melhorar um objetivo sem piorar o outro.
+  \item \textbf{Por que colônia de formigas e não força bruta?} Porque há
+  $m^n$ alocações possíveis (NP-difícil); a colônia busca boas soluções sem
+  testar todas.
+  \item \textbf{Para que serve o feromônio?} É a memória coletiva: movimentos que
+  apareceram em boas soluções ficam mais prováveis de serem repetidos.
+  \item \textbf{Qual a diferença entre $\tau$ e $\eta$?} $\tau$ é
+  \emph{aprendido} ao longo das iterações; $\eta$ é \emph{calculado} na hora, com
+  conhecimento do problema (energia e desperdício parciais).
+  \item \textbf{Por que o limite de 90\%?} Rodar perto de 100\% degrada o
+  desempenho e a migração de VMs ainda consome CPU.
+  \item \textbf{Por que a energia ``depende dos servidores''?} Porque a CPU total
+  é fixa; somando as potências, sobra $P^{idle}\times(\text{nº de servidores})$
+  como termo variável.
+\end{itemize}
+
+\end{document}
