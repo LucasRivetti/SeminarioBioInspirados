@@ -22,6 +22,9 @@ placement in cloud computing'' --- Gao et al. (2013)}
 \small Lucas Rivetti \quad Ian Nunes}
 \date{Junho de 2026}
 
+\usepackage{fancyhdr}
+\pagestyle{fancy}\fancyhf{}\fancyfoot[R]{\thepage}\renewcommand{\headrulewidth}{0pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[R]{\thepage}\renewcommand{\headrulewidth}{0pt}}
 \begin{document}
 \maketitle
 \begin{ideia}
@@ -495,4 +498,12 @@ $\bar{R}_p,\ \bar{R}_m,\ P$ & referências e prob.\ de correlação (instâncias
   como termo variável.
 \end{itemize}
 
+\renewcommand{\refname}{Referências}
+\begin{thebibliography}{9}\small
+\bibitem{gao2013} Y.~Gao, H.~Guan, Z.~Qi, Y.~Hou, L.~Liu. \emph{A multi-objective ant colony system algorithm for virtual machine placement in cloud computing}. Journal of Computer and System Sciences, 79(8):1230--1242, 2013.
+\bibitem{deb2002} K.~Deb, A.~Pratap, S.~Agarwal, T.~Meyarivan. \emph{A fast and elitist multiobjective genetic algorithm: NSGA-II}. IEEE Transactions on Evolutionary Computation, 6(2):182--197, 2002.
+\bibitem{dorigo1997} M.~Dorigo, L.~M.~Gambardella. \emph{Ant colony system: a cooperative learning approach to the traveling salesman problem}. IEEE Trans. on Evolutionary Computation, 1(1):53--66, 1997.
+\bibitem{zitzler1999} E.~Zitzler, L.~Thiele. \emph{Multiobjective evolutionary algorithms: a comparative case study and the strength Pareto approach}. IEEE Trans. on Evol. Computation, 3(4):257--271, 1999.
+\bibitem{vanveldhuizen1999} D.~A.~Van~Veldhuizen. \emph{Multiobjective Evolutionary Algorithms: Classifications, Analyses, and New Innovations}. PhD thesis, Air Force Institute of Technology, 1999.
+\end{thebibliography}
 \end{document}
