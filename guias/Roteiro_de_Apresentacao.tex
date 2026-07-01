@@ -1,0 +1,238 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}\usepackage[T1]{fontenc}\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{xcolor}\usepackage{mdframed}\usepackage{enumitem}\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}\usepackage{fancyhdr}
+\definecolor{azul}{HTML}{0D47A1}\definecolor{verde}{HTML}{1B5E20}\definecolor{cinza}{HTML}{555555}
+\definecolor{boxbg}{HTML}{EEF3F8}\definecolor{boxln}{HTML}{0D47A1}
+\definecolor{falabg}{HTML}{F1F7F1}\definecolor{falaln}{HTML}{1B5E20}
+\definecolor{tela}{HTML}{6B7280}
+\renewcommand{\contentsname}{Sumário}
+\titleformat{\section}{\Large\bfseries\color{azul}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{verde}}{\thesubsection}{0.6em}{}
+\titlespacing{\subsection}{0pt}{10pt}{4pt}
+\newmdenv[backgroundcolor=boxbg,linecolor=boxln,linewidth=1pt,roundcorner=4pt,
+  innertopmargin=6pt,innerbottommargin=6pt,skipabove=8pt,skipbelow=8pt]{ideia}
+\newmdenv[backgroundcolor=falabg,linecolor=falaln,linewidth=1.2pt,roundcorner=3pt,
+  innertopmargin=6pt,innerbottommargin=6pt,skipabove=5pt,skipbelow=8pt]{fala}
+\pagestyle{fancy}\fancyhf{}\fancyfoot[R]{\thepage}\renewcommand{\headrulewidth}{0pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[R]{\thepage}\renewcommand{\headrulewidth}{0pt}}
+\newcommand{\tela}[1]{\noindent\textcolor{tela}{\textbf{Na tela:} #1}\par\vspace{2pt}}
+\newcommand{\tempo}[1]{\hfill\textcolor{cinza}{\small(\textasciitilde #1)}}
+
+\title{\textbf{Roteiro de Apresentação}\\[3pt]
+\large Seminário --- Alocação de VMs com Colônia de Formigas (VMPACS)}
+\author{Lucas Rivetti \quad Ian Nunes}
+\date{Junho de 2026}
+
+\begin{document}
+\maketitle
+\begin{ideia}
+\textbf{Como usar este roteiro.} Para cada slide há duas coisas: \textbf{``Na
+tela''} (o que aparece, para você se situar) e uma caixa verde com a
+\textbf{fala sugerida} --- um texto natural que você pode ler ou adaptar com
+suas palavras. \textbf{Divisão:} \textbf{Lucas} apresenta os \textbf{slides 1 a
+5}; \textbf{Ian} apresenta os \textbf{slides 6 a 13}. Tempo total estimado:
+\textbf{11 a 13 minutos} (dentro dos 10--15 pedidos). Não precisa decorar:
+entenda a ideia de cada slide e fale com naturalidade.
+\end{ideia}
+
+\begin{ideia}
+\textbf{Dicas rápidas.} (1) Fale para o \emph{público}, não para o slide.
+(2) Respire entre os tópicos; não corra. (3) Aponte para o gráfico quando
+falar dos resultados. (4) Se travar, olhe a caixa verde. (5) Combinem a
+``passagem de bastão'' no fim do slide 5 (Lucas $\to$ Ian).
+\end{ideia}
+\tableofcontents
+\vspace{4pt}\hrule
+
+% =====================================================================
+\section{Parte 1 --- Lucas (slides 1 a 5)}
+
+\subsection{Slide 1 --- Título / Abertura \tempo{30 s}}
+\tela{título do trabalho, nomes, ``Energia × Desperdício''.}
+\begin{fala}
+``Boa tarde a todos. Nosso seminário é sobre a \textbf{alocação de máquinas
+virtuais na nuvem}, usando um algoritmo de \textbf{colônia de formigas} chamado
+VMPACS. A ideia é otimizar, ao mesmo tempo, dois objetivos que competem:
+o \textbf{consumo de energia} e o \textbf{desperdício de recursos}. Eu sou o
+Lucas e apresento a primeira parte; depois o Ian segue com os resultados.''
+\end{fala}
+
+\subsection{Slide 2 --- O problema: alocação de VMs \tempo{1 min}}
+\tela{o que é alocação de VMs + diagrama ``7 servidores $\to$ 3''.}
+\begin{fala}
+``Primeiro, o problema. Num \emph{data center}, várias máquinas virtuais --- as
+VMs --- dividem os servidores físicos. \textbf{Alocar VMs} é decidir em qual
+servidor cada VM vai rodar. Se a gente concentra as VMs em poucos servidores e
+desliga os ociosos, \textbf{economiza energia}. Mas tem um porém: se um servidor
+fica desbalanceado --- por exemplo, CPU cheia e memória vazia --- a gente
+\textbf{desperdiça recurso}. Esse problema é \textbf{NP-difícil}: para $n$ VMs e
+$m$ servidores existem $m^n$ possibilidades, então não dá para testar todas ---
+por isso usamos uma meta-heurística. Aqui na direita, um exemplo: 7 servidores
+mal usados viram 3 bem ocupados.''
+\end{fala}
+
+\subsection{Slide 3 --- Dois objetivos em conflito \tempo{1 min}}
+\tela{cartão ``Energia'' (E) e cartão ``Desperdício'' (W) + faixa do conflito.}
+\begin{fala}
+``Por isso o problema é \textbf{multiobjetivo}. O primeiro objetivo é a
+\textbf{energia}: a potência cresce com o uso de CPU, e servidores ociosos são
+desligados --- então minimizar energia é, na prática, \textbf{usar menos
+servidores}. O segundo é o \textbf{desperdício}, que penaliza o
+\textbf{desbalanceamento} entre CPU e memória de cada servidor. O conflito é que
+reduzir servidores pode acabar desbalanceando. Então, em vez de uma única
+resposta, buscamos um \textbf{conjunto das melhores trocas} --- a chamada
+\textbf{fronteira de Pareto}.''
+\end{fala}
+
+\subsection{Slide 4 --- Formulação matemática \tempo{1 min}}
+\tela{as duas funções $f_1$ e $f_2$, as restrições e as variáveis.}
+\begin{fala}
+``Matematicamente, temos duas funções a minimizar. A \textbf{$f_1$} é a energia:
+a soma, sobre os servidores ligados, da potência de cada um, que depende da CPU
+usada. A \textbf{$f_2$} é o desperdício: para cada servidor, o desbalanceamento
+entre o que sobra de CPU e de memória, dividido pelo que está em uso. Tudo isso
+sujeito a três regras: cada VM vai em \textbf{exatamente um} servidor, e nenhum
+servidor pode estourar o limite de CPU nem de memória, que fixamos em
+\textbf{90\%}. As variáveis $x$ e $y$ são binárias: $x$ diz se a VM está num
+servidor, e $y$ diz se o servidor está ligado.''
+\end{fala}
+
+\subsection{Slide 5 --- VMPACS: a metáfora das formigas \tempo{1 min}}
+\tela{a metáfora + 3 cartões: Feromônio ($\tau$), Heurística ($\eta$), Arquivo de Pareto.}
+\begin{fala}
+``Agora o algoritmo. O \textbf{VMPACS} é uma colônia de formigas. Na natureza,
+formigas deixam \textbf{feromônio} nos bons caminhos, e caminhos bons atraem mais
+formigas. Aqui, cada formiga monta uma alocação inteira, e os bons
+\textbf{movimentos} --- colocar tal VM em tal servidor --- ganham feromônio. São
+três ingredientes: o \textbf{feromônio}, que é a memória do que funcionou; a
+\textbf{heurística}, que é o conhecimento do problema, priorizando movimentos que
+poupam energia e equilibram; e o \textbf{arquivo de Pareto}, que guarda as
+melhores soluções. \textbf{Agora passo a palavra pro Ian}, que mostra como a
+formiga constrói e os resultados.''
+\end{fala}
+
+% =====================================================================
+\section{Parte 2 --- Ian (slides 6 a 13)}
+
+\subsection{Slide 6 --- VMPACS: como uma formiga constrói \tempo{1 min}}
+\tela{4 passos numerados + cartão ``Regra de escolha''.}
+\begin{fala}
+``Obrigado, Lucas. Vou detalhar como uma formiga constrói a solução, em quatro
+passos. \textbf{Um:} ela abre um servidor. \textbf{Dois:} escolhe a próxima VM
+por uma regra que combina feromônio e heurística --- com 80\% de chance ela pega
+o melhor movimento (intensificação) e com 20\% sorteia (exploração), pra não
+ficar presa. \textbf{Três:} faz a atualização \emph{local}, evaporando um pouco
+de feromônio pra diversificar. \textbf{Quatro:} no fim da rodada, as soluções de
+Pareto reforçam seus movimentos --- a atualização \emph{global}. Ela repete isso
+até alocar todas as VMs.''
+\end{fala}
+
+\subsection{Slide 7 --- Comparação: NSGA-II \tempo{50 s}}
+\tela{2 mecanismos (ordenação não-dominada e crowding) + codificação.}
+\begin{fala}
+``Para comparar, usamos o \textbf{NSGA-II}, o algoritmo genético multiobjetivo
+mais conhecido --- assim como o artigo compara o VMPACS com um genético. Ele tem
+dois mecanismos: a \textbf{ordenação por não-dominância}, que separa a população
+em frentes de Pareto, e a \textbf{distância de multidão}, que mantém as soluções
+espalhadas. Cada indivíduo é uma permutação das VMs, decodificada pelo first-fit,
+com cruzamento e mutação.''
+\end{fala}
+
+\subsection{Slide 8 --- Metodologia experimental \tempo{50 s}}
+\tela{4 cartões: Instâncias, Parâmetros, Métricas, Execuções.}
+\begin{fala}
+``Na metodologia: usamos instâncias com \textbf{100 VMs} e 100 servidores, e
+\textbf{cinco níveis de correlação} entre CPU e memória. Demos \textbf{orçamentos
+iguais} aos dois algoritmos, cerca de mil avaliações cada, para ser justo.
+Avaliamos com \textbf{quatro métricas}: hipervolume e IGD, que medem
+convergência; ONVG, que conta as soluções; e spacing, que mede a uniformidade. E
+rodamos tudo \textbf{10 vezes} para ter média e desvio.''
+\end{fala}
+
+\subsection{Slide 9 --- Resultados: energia e desperdício \tempo{1 min}}
+\tela{dois gráficos de barras (energia e desperdício) por correlação.}
+\begin{fala}
+``Os resultados práticos. Aqui estão \textbf{energia} e \textbf{desperdício}, por
+nível de correlação --- em ambos, \textbf{barra menor é melhor}. O \textbf{NSGA-II}
+conseguiu menor energia em \textbf{4 dos 5} cenários, e menor desperdício também
+em 4 de 5. A exceção é no meio, em $P = 0{,}5$, onde o VMPACS empata ou ganha no
+desperdício.''
+\end{fala}
+
+\subsection{Slide 10 --- Resultados: métricas multiobjetivo \tempo{1 min}}
+\tela{barras de Hipervolume e IGD + a fronteira de Pareto (curva cinza + marcadores).}
+\begin{fala}
+``Aqui as métricas multiobjetivo. No \textbf{hipervolume}, barra mais alta é
+melhor; no \textbf{IGD}, mais baixa é melhor --- e o NSGA-II leva na maioria.
+Embaixo está a \textbf{fronteira de Pareto}: a curva cinza é a fronteira real, e
+os marcadores mostram onde cada algoritmo cai. Repare que a curva é
+\textbf{decrescente, mas curta}: o trade-off é \emph{raso}, porque empacotar bem
+reduz energia \emph{e} desperdício ao mesmo tempo. Por isso cada algoritmo
+converge para perto do \textbf{joelho}, de menor energia.''
+\end{fala}
+
+\subsection{Slide 11 --- Discussão \tempo{1 min}}
+\tela{4 pontos: convergência, diversidade, fronteira compacta, correlação.}
+\begin{fala}
+``Discutindo: o NSGA-II converge para soluções de menor energia e desperdício na
+maioria dos casos. O VMPACS, por outro lado, encontra \textbf{mais soluções
+não-dominadas} nas correlações negativas --- dá mais opções de compromisso. Um
+ponto-chave: a fronteira é compacta porque os dois objetivos são \textbf{quase
+alinhados} aqui. E a correlação importa: quando CPU e memória são altas juntas,
+fica mais difícil equilibrar, e o desperdício sobe.''
+\end{fala}
+
+\subsection{Slide 12 --- Conclusões \tempo{50 s}}
+\tela{3 conclusões numeradas + trabalhos futuros.}
+\begin{fala}
+``Concluindo: implementamos o \textbf{VMPACS} e o \textbf{NSGA-II} nesse problema
+de dois objetivos. Com orçamentos iguais, o \textbf{NSGA-II convergiu melhor}, e o
+VMPACS deu fronteiras um pouco mais \textbf{diversas}. E vimos que, nessas
+instâncias, os objetivos são quase alinhados, o que gera fronteiras compactas ---
+um resultado honesto sobre os limites da formulação. Como \textbf{trabalho
+futuro}, dá para testar instâncias maiores e uma versão \emph{memética} do
+VMPACS, com busca local.''
+\end{fala}
+
+\subsection{Slide 13 --- Referências / Encerramento \tempo{15 s}}
+\tela{lista de referências + ``Obrigado! Perguntas?''.}
+\begin{fala}
+``Essas são as principais referências, com destaque para o artigo de
+\textbf{Gao e colegas, de 2013}, que foi a nossa base. \textbf{Obrigado}, e
+estamos abertos a perguntas.''
+\end{fala}
+
+% =====================================================================
+\section{Perguntas prováveis da banca (e respostas curtas)}
+\begin{itemize}[leftmargin=1.4em,itemsep=4pt]
+  \item \textbf{Por que multiobjetivo e não só ``gastar menos energia''?}
+  Porque usar poucos servidores pode desbalancear e aumentar o desperdício;
+  tratar os dois juntos dá um leque de compromissos ao operador.
+  \item \textbf{O que é a fronteira de Pareto?} O conjunto de soluções em que não
+  dá para melhorar um objetivo sem piorar o outro.
+  \item \textbf{Por que a fronteira tem poucos pontos / não é uma curva suave?}
+  Porque a energia é discreta (vale $\text{const}+162\cdot k$, com $k$ inteiro de
+  servidores) e o trade-off satura rápido --- os dois objetivos são quase
+  alinhados nessas instâncias.
+  \item \textbf{Por que o NSGA-II superou o VMPACS aqui?} Demos orçamentos iguais
+  (no artigo o genético recebia bem menos), e o decodificador \emph{first-fit} do
+  NSGA-II empacota muito bem; o VMPACS converge rápido, mas refina menos o
+  balanceamento.
+  \item \textbf{Qual a diferença entre $\tau$ (feromônio) e $\eta$ (heurística)?}
+  $\tau$ é \emph{aprendido} ao longo das iterações; $\eta$ é \emph{calculado} na
+  hora, com conhecimento do problema.
+  \item \textbf{Nossos números batem com o artigo?} Mesma ordem de grandeza e
+  mesmas tendências; a energia ficou em média \textbf{+8\%} (empatando em
+  $P=1{,}0$), e a nossa fronteira de referência praticamente coincide com a do
+  artigo --- o modelo está correto, falta refinar a busca.
+\end{itemize}
+
+\begin{ideia}
+\textbf{Antes de começar:} abrir os slides em tela cheia; testar o avanço;
+combinar quem clica; respirar. \textbf{Boa apresentação!}
+\end{ideia}
+
+\end{document}
